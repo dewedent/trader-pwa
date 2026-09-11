@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Дневник трейдера</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4caf50">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg:#111; --card:#1e1e1e; --text:#eee; --accent:#4caf50; --loss:#f44336;
+  }
+  .light {
+    --bg:#f5f5f5; --card:#fff; --text:#111; --accent:#2e7d32; --loss:#c62828;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial; background:var(--bg); color:var(--text);
+    padding:15px; transition:0.3s; margin:0;
+  }
+  h1,h2 { color:var(--accent); }
+  input, select, button {
+    padding:10px; margin:4px 0; border-radius:8px; border:none;
+    background:#333; color:#fff; font-size:15px; width:100%;
+  }
+  .light input, .light select { background:#ddd; color:#111; }
+  button { background:var(--accent); cursor:pointer; font-weight:bold; }
+  button:hover { opacity:0.9; }
+  table { border-collapse:collapse; width:100%; margin-top:10px; font-size:12px; }
+  th, td { border:1px solid #333; padding:5px; text-align:center; }
+  th { background:#222; }
+  .light th { background:#ddd; }
+  .win { color:var(--accent); }
+  .loss { color:var(--loss); }
+  .card { background:var(--card); padding:15px; border-radius:12px; margin-bottom:15px; }
+  canvas { max-height:260px; }
+</style>
+</head>
+<body>
+
+<button onclick="toggleTheme()">🌙 / ☀️ Тема</button>
+<h1>📒 Дневник трейдера</h1>
+
+<div class="card">
+  <h2>➕ Добавить сделку</h2>
+  <input id="instr" placeholder="Инструмент">
+  <select id="dir"><option>Long</option><option>Short</option></select>
+  <input id="entry" placeholder="Цена входа" type="number">
+  <input id="exit" placeholder="Цена выхода" type="number">
+  <input id="stop" placeholder="Стоп" type="number">
+  <input id="qty" placeholder="Кол-во" type="number">
+  <input id="comm" placeholder="Комиссия %" type="number">
+  <input id="tarif" placeholder="Тариф" type="number">
+  <input id="topup" placeholder="Пополнение" type="number">
+  <input id="time" type="time">
+  <button onclick="addTrade()">Добавить</button>
+</div>
+
+<div class="card">
+  <h2>📊 Статистика</h2>
+  <div id="stats"></div>
+</div>
+
+<div class="card">
+  <h2>🎯 Планировщик</h2>
+  <input id="goal" placeholder="Цель, ₽" type="number">
+  <select id="period">
+    <option value="5">1 неделя</option>
+    <option value="10">2 недели</option>
+    <option value="20">1 месяц</option>
+  </select>
+  <button onclick="calcPlan()">Рассчитать депозит</button>
+  <div id="planResult"></div>
+</div>
+
+<div class="card">
+  <h2>📈 График доходности и просадки</h2>
+  <canvas id="equityChart"></canvas>
+</div>
+
+<div class="card">
+  <h2>🧠 Советы</h2>
+  <div id="advice"></div>
+</div>
+
+<div class="card">
+  <h2>📊 По инструментам</h2>
+  <div id="instrStats"></div>
+</div>
+
+<div class="card">
+  <h2>📋 Сделки</h2>
+  <button onclick="exportExcel()">📥 Экспорт в Excel</button>
+  <table id="tradesTable">
+    <thead>
+      <tr>
+        <th>№</th><th>Инстр.</th><th>Напр.</th><th>Вход</th><th>Выход</th>
+        <th>Стоп</th><th>Кол</th><th>Прибыль</th><th>R:R</th><th>Win/Loss</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+let trades = JSON.parse(localStorage.getItem('trades') || '[]');
+let chart;
+
+function save() { localStorage.setItem('trades', JSON.stringify(trades)); }
+function toggleTheme() { document.body.classList.toggle('light'); }
+
+function addTrade() {
+  const t = {
+    instr: instr.value, dir: dir.value,
+    entry: +entry.value, exit: +exit.value, stop: +stop.value,
+    qty: +qty.value, comm: +comm.value, tarif: +tarif.value,
+    topup: +topup.value, time: time.value || '00:00'
+  };
+  const profit = t.dir === 'Long'
+    ? (t.exit - t.entry) * t.qty - (t.entry*t.qty*t.comm/100 + t.exit*t.qty*t.comm/100) - t.tarif
+    : (t.entry - t.exit) * t.qty - (t.entry*t.qty*t.comm/100 + t.exit*t.qty*t.comm/100) - t.tarif;
+  const risk = Math.abs(t.entry - t.stop) * t.qty;
+  const rr = risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
+  t.profit = profit; t.risk = risk; t.rr = rr;
+  t.result = profit > 0 ? 'Win' : profit < 0 ? 'Loss' : 'BE';
+  trades.push(t); save(); render();
+}
+
+function render() {
+  const tbody = document.querySelector('#tradesTable tbody');
+  tbody.innerHTML = '';
+  trades.forEach((t, i) => {
+    tbody.innerHTML += `<tr>
+      <td>${i+1}</td><td>${t.instr}</td><td>${t.dir}</td>
+      <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
+      <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
+      <td>${t.rr.toFixed(2)}</td>
+      <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
+    </tr>`;
+  });
+
+  const wins = trades.filter(t => t.result === 'Win').length;
+  const losses = trades.filter(t => t.result === 'Loss').length;
+  const totalProfit = trades.reduce((s, t) => s + t.profit, 0);
+  const avgRR = trades.length ? trades.reduce((s, t) => s + t.rr, 0) / trades.length : 0;
+  const winRate = trades.length ? wins / trades.length * 100 : 0;
+  const deposit = trades.reduce((s, t) => s + t.profit + t.topup, 0);
+
+  let peak = 0, acc = 0, maxDD = 0;
+  trades.forEach(t => {
+    acc += t.profit + t.topup;
+    if (acc > peak) peak = acc;
+    if (peak - acc > maxDD) maxDD = peak - acc;
+  });
+
+  stats.innerHTML = `
+    <p>Сделок: <b>${trades.length}</b></p>
+    <p>Прибыльных: <b class="win">${wins}</b></p>
+    <p>Убыточных: <b class="loss">${losses}</b></p>
+    <p>Win Rate: <b>${winRate.toFixed(1)}%</b></p>
+    <p>Средний R:R: <b>${avgRR.toFixed(2)}</b></p>
+    <p>Прибыль: <b class="${totalProfit>0?'win':'loss'}">${totalProfit.toFixed(2)} ₽</b></p>
+    <p>Депозит: <b>${deposit.toFixed(2)} ₽</b></p>
+    <p>Просадка: <b class="loss">${maxDD.toFixed(2)} ₽</b></p>
+  `;
+
+  renderChart();
+  renderAdvice(winRate, avgRR, totalProfit, maxDD);
+}
+
+function renderAdvice(winRate, avgRR, profit, dd) {
+  let tips = [];
+  if (trades.length < 10) tips.push('📊 Сделай минимум 10 сделок для статистики.');
+  if (winRate < 50 && trades.length >= 10) tips.push('⚠️ Win Rate ниже 50% — проверь входы.');
+  if (avgRR < 1.5 && trades.length >= 10) tips.push('📉 R:R ниже 1.5 — ставь дальние тейки.');
+  if (dd > profit * 0.5 && trades.length >= 10) tips.push('⚠️ Просадка большая — снизь риск.');
+  if (!tips.length) tips.push('✅ Всё в норме. Продолжай!');
+  advice.innerHTML = tips.map(t => `<p>${t}</p>`).join('');
+}
+
+function renderChart() {
+  let acc = 0, peak = 0;
+  const labels = [], data = [], dd = [];
+  trades.forEach((t, i) => {
+    acc += t.profit + t.topup;
+    if (acc > peak) peak = acc;
+    labels.push(i+1); data.push(acc); dd.push(peak - acc);
+  });
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('equityChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Депозит', data, borderColor: '#4caf50', backgroundColor:'rgba(76,175,80,0.2)', fill:true, tension:0.3 },
+        { label: 'Просадка', data: dd, borderColor: '#f44336', backgroundColor:'rgba(244,67,54,0.2)', fill:true, tension:0.3 }
+      ]
+    },
+    options: { plugins: { legend: { labels: { color: '#888' } } } }
+  });
+}
+
+function calcPlan() {
+  const goal = +document.getElementById('goal').value;
+  const n = +document.getElementById('period').value;
+  const wins = n * 0.6, losses = n * 0.4;
+  const factor = wins * 2 - losses;
+  const risk = goal / factor;
+  planResult.innerHTML = `
+    <p>Цель: <b>${goal} ₽</b></p>
+    <p>Сделок: <b>${n}</b></p>
+    <p>Риск на сделку: <b>${risk.toFixed(2)} ₽</b></p>
+    <p>Нужный депозит: <b>${(risk*100).toFixed(2)} ₽</b></p>
+  `;
+}
+
+function exportExcel() {
+  let csv = 'Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Прибыль,R:R,Результат\n';
+  trades.forEach(t => {
+    csv += `${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.profit.toFixed(2)},${t.rr.toFixed(2)},${t.result}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'trades.csv';
+  a.click();
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js');
+}
+
+render();
+</script>
+</body>
+</html>
