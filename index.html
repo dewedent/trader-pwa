@@ -36,10 +36,9 @@
   .loss { color:var(--loss); }
   .card { background:var(--card); padding:15px; border-radius:12px; margin-bottom:15px; }
   canvas { max-height:260px; }
-  .del-btn {
-    background: transparent; color: var(--loss); border:none;
-    font-size:16px; cursor:pointer; padding:2px 6px;
-  }
+  .del-btn { background:transparent; color:var(--loss); border:none; font-size:16px; cursor:pointer; }
+  .edit-btn { background:transparent; color:#ffc107; border:none; font-size:16px; cursor:pointer; }
+  .danger { background:var(--loss); }
 </style>
 </head>
 <body>
@@ -57,30 +56,42 @@
   <select id="dir"><option>Long</option><option>Short</option></select>
 
   <label>Цена входа</label>
-  <input id="entry" placeholder="Цена входа" type="number">
+  <input id="entry" type="number">
 
   <label>Цена выхода</label>
-  <input id="exit" placeholder="Цена выхода" type="number">
+  <input id="exit" type="number">
 
   <label>Стоп-лосс</label>
-  <input id="stop" placeholder="Стоп" type="number">
+  <input id="stop" type="number">
 
   <label>Количество акций</label>
-  <input id="qty" placeholder="Кол-во" type="number">
+  <input id="qty" type="number">
 
   <label>Комиссия, %</label>
-  <input id="comm" placeholder="Например, 0.05" type="number">
+  <input id="comm" type="number">
 
   <label>Тариф, ₽</label>
-  <input id="tarif" placeholder="Например, 390" type="number">
+  <input id="tarif" type="number">
 
   <label>Пополнение, ₽</label>
-  <input id="topup" placeholder="Например, 1000" type="number">
+  <input id="topup" type="number">
 
-  <label>Время сделки</label>
+  <label>Дата</label>
+  <input id="date" type="date">
+
+  <label>Время</label>
   <input id="time" type="time">
 
   <button onclick="addTrade()">Добавить</button>
+</div>
+
+<div class="card">
+  <h2>📅 Фильтр по датам</h2>
+  <label>От</label>
+  <input id="filterFrom" type="date" onchange="render()">
+  <label>До</label>
+  <input id="filterTo" type="date" onchange="render()">
+  <button onclick="clearFilter()">Сбросить фильтр</button>
 </div>
 
 <div class="card">
@@ -118,11 +129,12 @@
 <div class="card">
   <h2>📋 Сделки</h2>
   <button onclick="exportExcel()">📥 Экспорт в Excel</button>
+  <button class="danger" onclick="resetAll()">🗑 Сбросить всё</button>
   <table id="tradesTable">
     <thead>
       <tr>
-        <th>№</th><th>Инстр.</th><th>Напр.</th><th>Вход</th><th>Выход</th>
-        <th>Стоп</th><th>Кол</th><th>Прибыль</th><th>R:R</th><th>Время</th><th>Win/Loss</th><th>Удалить</th>
+        <th>№</th><th>Дата</th><th>Инстр.</th><th>Напр.</th><th>Вход</th><th>Выход</th>
+        <th>Стоп</th><th>Кол</th><th>Прибыль</th><th>R:R</th><th>Время</th><th>Win/Loss</th><th>Действия</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -131,6 +143,7 @@
 
 <script>
 let trades = JSON.parse(localStorage.getItem('trades') || '[]');
+let editIndex = -1;
 let chart;
 
 function save() { localStorage.setItem('trades', JSON.stringify(trades)); }
@@ -141,7 +154,8 @@ function addTrade() {
     instr: instr.value, dir: dir.value,
     entry: +entry.value, exit: +exit.value, stop: +stop.value,
     qty: +qty.value, comm: +comm.value, tarif: +tarif.value,
-    topup: +topup.value, time: time.value || '00:00'
+    topup: +topup.value, date: date.value || new Date().toISOString().slice(0,10),
+    time: time.value || '00:00'
   };
 
   const profit = t.dir === 'Long'
@@ -154,51 +168,94 @@ function addTrade() {
   t.profit = profit; t.risk = risk; t.rr = rr;
   t.result = profit > 0 ? 'Win' : profit < 0 ? 'Loss' : 'BE';
 
-  trades.push(t); save(); render();
+  if (editIndex >= 0) {
+    trades[editIndex] = t;
+    editIndex = -1;
+  } else {
+    trades.push(t);
+  }
 
-  // Очистка полей
-  instr.value = ''; entry.value = ''; exit.value = '';
-  stop.value = ''; qty.value = ''; comm.value = '';
-  tarif.value = ''; topup.value = ''; time.value = '';
+  save(); render(); clearFields();
 }
 
-function deleteTrade(index) {
-  if (!confirm('Удалить эту сделку?')) return;
-  trades.splice(index, 1);
-  save(); render();
+function clearFields() {
+  instr.value=''; entry.value=''; exit.value='';
+  stop.value=''; qty.value=''; comm.value='';
+  tarif.value=''; topup.value=''; date.value=''; time.value='';
+}
+
+function deleteTrade(i) {
+  if (!confirm('Удалить сделку?')) return;
+  trades.splice(i, 1); save(); render();
+}
+
+function editTrade(i) {
+  const t = trades[i];
+  instr.value = t.instr; dir.value = t.dir;
+  entry.value = t.entry; exit.value = t.exit; stop.value = t.stop;
+  qty.value = t.qty; comm.value = t.comm; tarif.value = t.tarif;
+  topup.value = t.topup; date.value = t.date; time.value = t.time;
+  editIndex = i;
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function resetAll() {
+  if (!confirm('Удалить ВСЕ сделки? Это нельзя отменить.')) return;
+  trades = []; save(); render();
+}
+
+function clearFilter() {
+  filterFrom.value = ''; filterTo.value = ''; render();
+}
+
+function getFiltered() {
+  const from = filterFrom.value;
+  const to = filterTo.value;
+  return trades.filter(t => {
+    if (from && t.date < from) return false;
+    if (to && t.date > to) return false;
+    return true;
+  });
 }
 
 function render() {
+  const list = getFiltered();
   const tbody = document.querySelector('#tradesTable tbody');
   tbody.innerHTML = '';
-  trades.forEach((t, i) => {
+  list.forEach((t) => {
+    const realIndex = trades.indexOf(t);
     tbody.innerHTML += `<tr>
-      <td>${i+1}</td><td>${t.instr}</td><td>${t.dir}</td>
+      <td>${realIndex+1}</td>
+      <td>${t.date || '-'}</td>
+      <td>${t.instr}</td><td>${t.dir}</td>
       <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
       <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
       <td>${t.rr.toFixed(2)}</td>
       <td>${t.time}</td>
       <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
-      <td><button class="del-btn" onclick="deleteTrade(${i})">🗑</button></td>
+      <td>
+        <button class="edit-btn" onclick="editTrade(${realIndex})">✏️</button>
+        <button class="del-btn" onclick="deleteTrade(${realIndex})">🗑</button>
+      </td>
     </tr>`;
   });
 
-  const wins = trades.filter(t => t.result === 'Win').length;
-  const losses = trades.filter(t => t.result === 'Loss').length;
-  const totalProfit = trades.reduce((s, t) => s + t.profit, 0);
-  const avgRR = trades.length ? trades.reduce((s, t) => s + t.rr, 0) / trades.length : 0;
-  const winRate = trades.length ? wins / trades.length * 100 : 0;
-  const deposit = trades.reduce((s, t) => s + t.profit + t.topup, 0);
+  const wins = list.filter(t => t.result === 'Win').length;
+  const losses = list.filter(t => t.result === 'Loss').length;
+  const totalProfit = list.reduce((s, t) => s + t.profit, 0);
+  const avgRR = list.length ? list.reduce((s, t) => s + t.rr, 0) / list.length : 0;
+  const winRate = list.length ? wins / list.length * 100 : 0;
+  const deposit = list.reduce((s, t) => s + t.profit + t.topup, 0);
 
   let peak = 0, acc = 0, maxDD = 0;
-  trades.forEach(t => {
+  list.forEach(t => {
     acc += t.profit + t.topup;
     if (acc > peak) peak = acc;
     if (peak - acc > maxDD) maxDD = peak - acc;
   });
 
   stats.innerHTML = `
-    <p>Сделок: <b>${trades.length}</b></p>
+    <p>Сделок: <b>${list.length}</b></p>
     <p>Прибыльных: <b class="win">${wins}</b></p>
     <p>Убыточных: <b class="loss">${losses}</b></p>
     <p>Win Rate: <b>${winRate.toFixed(1)}%</b></p>
@@ -208,9 +265,9 @@ function render() {
     <p>Просадка: <b class="loss">${maxDD.toFixed(2)} ₽</b></p>
   `;
 
-  renderChart();
+  renderChart(list);
   renderAdvice(winRate, avgRR, totalProfit, maxDD);
-  renderInstrStats();
+  renderInstrStats(list);
 }
 
 function renderAdvice(winRate, avgRR, profit, dd) {
@@ -223,9 +280,9 @@ function renderAdvice(winRate, avgRR, profit, dd) {
   advice.innerHTML = tips.map(t => `<p>${t}</p>`).join('');
 }
 
-function renderInstrStats() {
+function renderInstrStats(list) {
   const map = {};
-  trades.forEach(t => {
+  list.forEach(t => {
     if (!map[t.instr]) map[t.instr] = { count:0, wins:0, profit:0 };
     map[t.instr].count++;
     if (t.result === 'Win') map[t.instr].wins++;
@@ -241,10 +298,10 @@ function renderInstrStats() {
   instrStats.innerHTML = html;
 }
 
-function renderChart() {
+function renderChart(list) {
   let acc = 0, peak = 0;
   const labels = [], data = [], dd = [];
-  trades.forEach((t, i) => {
+  list.forEach((t, i) => {
     acc += t.profit + t.topup;
     if (acc > peak) peak = acc;
     labels.push(i+1); data.push(acc); dd.push(peak - acc);
@@ -278,9 +335,9 @@ function calcPlan() {
 }
 
 function exportExcel() {
-  let csv = 'Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Прибыль,R:R,Время,Результат\n';
+  let csv = 'Дата,Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Прибыль,R:R,Время,Результат\n';
   trades.forEach(t => {
-    csv += `${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.profit.toFixed(2)},${t.rr.toFixed(2)},${t.time},${t.result}\n`;
+    csv += `${t.date||''},${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.profit.toFixed(2)},${t.rr.toFixed(2)},${t.time},${t.result}\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
