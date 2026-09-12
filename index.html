@@ -9,23 +9,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dexie@3/dist/dexie.min.js"></script>
 <style>
-  :root {
-    --bg:#111; --card:#1e1e1e; --text:#eee; --accent:#4caf50; --loss:#f44336;
-  }
-  .light {
-    --bg:#f5f5f5; --card:#fff; --text:#111; --accent:#2e7d32; --loss:#c62828;
-  }
+  :root { --bg:#111; --card:#1e1e1e; --text:#eee; --accent:#4caf50; --loss:#f44336; }
+  .light { --bg:#f5f5f5; --card:#fff; --text:#111; --accent:#2e7d32; --loss:#c62828; }
   * { box-sizing: border-box; }
-  body {
-    font-family: Arial; background:var(--bg); color:var(--text);
-    padding:15px; transition:0.3s; margin:0;
-  }
+  body { font-family: Arial; background:var(--bg); color:var(--text); padding:15px; transition:0.3s; margin:0; }
   h1,h2 { color:var(--accent); }
   label { font-size:13px; opacity:0.7; }
-  input, select, button {
-    padding:10px; margin:4px 0; border-radius:8px; border:none;
-    background:#333; color:#fff; font-size:15px; width:100%;
-  }
+  input, select, button { padding:10px; margin:4px 0; border-radius:8px; border:none; background:#333; color:#fff; font-size:15px; width:100%; }
   .light input, .light select { background:#ddd; color:#111; }
   button { background:var(--accent); cursor:pointer; font-weight:bold; }
   button:hover { opacity:0.9; }
@@ -49,36 +39,27 @@
 
 <div class="card">
   <h2>➕ Добавить сделку</h2>
-
-  <label>Инструмент</label>
-  <input id="instr" placeholder="Например, Новатэк">
-
+  <label>Инструмент</label><input id="instr">
   <label>Направление</label>
   <select id="dir"><option>Long</option><option>Short</option></select>
-
   <label>Цена входа</label><input id="entry" type="number">
   <label>Цена выхода</label><input id="exit" type="number">
   <label>Стоп-лосс</label><input id="stop" type="number">
   <label>Количество акций</label><input id="qty" type="number">
-
-  <label>Комиссия за вход, ₽</label>
-  <input id="commIn" type="number" placeholder="Например, 1.98">
-
-  <label>Комиссия за выход, ₽</label>
-  <input id="commOut" type="number" placeholder="Например, 2.01">
-
+  <label>Комиссия за вход, ₽</label><input id="commIn" type="number">
+  <label>Комиссия за выход, ₽</label><input id="commOut" type="number">
   <label>Тариф, ₽</label><input id="tarif" type="number">
   <label>Пополнение, ₽</label><input id="topup" type="number">
   <label>Дата</label><input id="date" type="date">
   <label>Время</label><input id="time" type="time">
-
   <button onclick="addTrade()">Добавить</button>
 </div>
 
 <div class="card">
   <h2>💾 Резервная копия</h2>
   <button onclick="exportData()">📤 Экспорт в файл</button>
-  <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+  <input type="file" id="importFile" accept=".json" style="display:none">
+  <button onclick="document.getElementById('importFile').click()">📥 Импорт из файла</button>
 </div>
 
 <div class="card">
@@ -90,7 +71,8 @@
 
 <div class="card"><h2>📊 Статистика</h2><div id="stats"></div></div>
 
-<div class="card"><h2>🎯 Планировщик</h2>
+<div class="card">
+  <h2>🎯 Планировщик</h2>
   <input id="goal" placeholder="Цель, ₽" type="number">
   <select id="period">
     <option value="5">1 неделя</option>
@@ -152,16 +134,11 @@ async function addTrade() {
   const gross = t.dir === 'Long'
     ? (t.exit - t.entry) * t.qty
     : (t.entry - t.exit) * t.qty;
+  t.profit = gross - t.commIn - t.commOut - t.tarif;
 
-  const profit = gross - t.commIn - t.commOut - t.tarif;
-
-  const risk = Math.abs(t.entry - t.stop) * t.qty;
-  const rr = risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
-
-  t.profit = profit;
-  t.risk = risk;
-  t.rr = rr;
-  t.result = profit > 0 ? 'Win' : profit < 0 ? 'Loss' : 'BE';
+  t.risk = Math.abs(t.entry - t.stop) * t.qty;
+  t.rr = t.risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
+  t.result = t.profit > 0 ? 'Win' : t.profit < 0 ? 'Loss' : 'BE';
 
   if (editIndex >= 0) {
     t.id = trades[editIndex].id;
@@ -220,19 +197,11 @@ function render() {
   tbody.innerHTML = '';
   list.forEach(t => {
     tbody.innerHTML += `<tr>
-      <td>${t.id}</td>
-      <td>${t.date||'-'}</td>
-      <td>${t.instr}</td>
-      <td>${t.dir}</td>
-      <td>${t.entry}</td>
-      <td>${t.exit}</td>
-      <td>${t.stop}</td>
-      <td>${t.qty}</td>
-      <td>${t.commIn}</td>
-      <td>${t.commOut}</td>
+      <td>${t.id}</td><td>${t.date||'-'}</td><td>${t.instr}</td><td>${t.dir}</td>
+      <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
+      <td>${t.commIn}</td><td>${t.commOut}</td>
       <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
-      <td>${t.rr.toFixed(2)}</td>
-      <td>${t.time}</td>
+      <td>${t.rr.toFixed(2)}</td><td>${t.time}</td>
       <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
       <td>
         <button class="edit-btn" onclick="editTrade(${t.id})">✏️</button>
@@ -357,11 +326,10 @@ async function importData(event) {
   const text = await file.text();
   let data = JSON.parse(text);
 
-  // Очистка и пересчёт
   data = data
-    .filter(t => t.instr && t.qty > 0) // убираем пустые
+    .filter(t => t.instr && t.qty > 0)
     .map(t => {
-      t.stop = t.stop || t.entry;       // если стоп 0 или null
+      t.stop = t.stop || t.entry;
       t.commIn = t.commIn || 0;
       t.commOut = t.commOut || 0;
       t.tarif = t.tarif || 0;
@@ -380,7 +348,10 @@ async function importData(event) {
 
   await db.trades.bulkPut(data);
   loadTrades();
+  alert('✅ Загружено сделок: ' + data.length);
 }
+
+document.getElementById('importFile').addEventListener('change', importData);
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./service-worker.js');
