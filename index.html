@@ -20,6 +20,7 @@
     padding:15px; transition:0.3s; margin:0;
   }
   h1,h2 { color:var(--accent); }
+  label { font-size:13px; opacity:0.7; }
   input, select, button {
     padding:10px; margin:4px 0; border-radius:8px; border:none;
     background:#333; color:#fff; font-size:15px; width:100%;
@@ -35,6 +36,10 @@
   .loss { color:var(--loss); }
   .card { background:var(--card); padding:15px; border-radius:12px; margin-bottom:15px; }
   canvas { max-height:260px; }
+  .del-btn {
+    background: transparent; color: var(--loss); border:none;
+    font-size:16px; cursor:pointer; padding:2px 6px;
+  }
 </style>
 </head>
 <body>
@@ -44,16 +49,37 @@
 
 <div class="card">
   <h2>➕ Добавить сделку</h2>
-  <input id="instr" placeholder="Инструмент">
+
+  <label>Инструмент</label>
+  <input id="instr" placeholder="Например, Новатэк">
+
+  <label>Направление</label>
   <select id="dir"><option>Long</option><option>Short</option></select>
+
+  <label>Цена входа</label>
   <input id="entry" placeholder="Цена входа" type="number">
+
+  <label>Цена выхода</label>
   <input id="exit" placeholder="Цена выхода" type="number">
+
+  <label>Стоп-лосс</label>
   <input id="stop" placeholder="Стоп" type="number">
+
+  <label>Количество акций</label>
   <input id="qty" placeholder="Кол-во" type="number">
-  <input id="comm" placeholder="Комиссия %" type="number">
-  <input id="tarif" placeholder="Тариф" type="number">
-  <input id="topup" placeholder="Пополнение" type="number">
+
+  <label>Комиссия, %</label>
+  <input id="comm" placeholder="Например, 0.05" type="number">
+
+  <label>Тариф, ₽</label>
+  <input id="tarif" placeholder="Например, 390" type="number">
+
+  <label>Пополнение, ₽</label>
+  <input id="topup" placeholder="Например, 1000" type="number">
+
+  <label>Время сделки</label>
   <input id="time" type="time">
+
   <button onclick="addTrade()">Добавить</button>
 </div>
 
@@ -96,7 +122,7 @@
     <thead>
       <tr>
         <th>№</th><th>Инстр.</th><th>Напр.</th><th>Вход</th><th>Выход</th>
-        <th>Стоп</th><th>Кол</th><th>Прибыль</th><th>R:R</th><th>Win/Loss</th>
+        <th>Стоп</th><th>Кол</th><th>Прибыль</th><th>R:R</th><th>Время</th><th>Win/Loss</th><th>Удалить</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -117,14 +143,29 @@ function addTrade() {
     qty: +qty.value, comm: +comm.value, tarif: +tarif.value,
     topup: +topup.value, time: time.value || '00:00'
   };
+
   const profit = t.dir === 'Long'
     ? (t.exit - t.entry) * t.qty - (t.entry*t.qty*t.comm/100 + t.exit*t.qty*t.comm/100) - t.tarif
     : (t.entry - t.exit) * t.qty - (t.entry*t.qty*t.comm/100 + t.exit*t.qty*t.comm/100) - t.tarif;
+
   const risk = Math.abs(t.entry - t.stop) * t.qty;
   const rr = risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
+
   t.profit = profit; t.risk = risk; t.rr = rr;
   t.result = profit > 0 ? 'Win' : profit < 0 ? 'Loss' : 'BE';
+
   trades.push(t); save(); render();
+
+  // Очистка полей
+  instr.value = ''; entry.value = ''; exit.value = '';
+  stop.value = ''; qty.value = ''; comm.value = '';
+  tarif.value = ''; topup.value = ''; time.value = '';
+}
+
+function deleteTrade(index) {
+  if (!confirm('Удалить эту сделку?')) return;
+  trades.splice(index, 1);
+  save(); render();
 }
 
 function render() {
@@ -136,7 +177,9 @@ function render() {
       <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
       <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
       <td>${t.rr.toFixed(2)}</td>
+      <td>${t.time}</td>
       <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
+      <td><button class="del-btn" onclick="deleteTrade(${i})">🗑</button></td>
     </tr>`;
   });
 
@@ -167,6 +210,7 @@ function render() {
 
   renderChart();
   renderAdvice(winRate, avgRR, totalProfit, maxDD);
+  renderInstrStats();
 }
 
 function renderAdvice(winRate, avgRR, profit, dd) {
@@ -177,6 +221,24 @@ function renderAdvice(winRate, avgRR, profit, dd) {
   if (dd > profit * 0.5 && trades.length >= 10) tips.push('⚠️ Просадка большая — снизь риск.');
   if (!tips.length) tips.push('✅ Всё в норме. Продолжай!');
   advice.innerHTML = tips.map(t => `<p>${t}</p>`).join('');
+}
+
+function renderInstrStats() {
+  const map = {};
+  trades.forEach(t => {
+    if (!map[t.instr]) map[t.instr] = { count:0, wins:0, profit:0 };
+    map[t.instr].count++;
+    if (t.result === 'Win') map[t.instr].wins++;
+    map[t.instr].profit += t.profit;
+  });
+  let html = '<table><tr><th>Инструмент</th><th>Сделок</th><th>Win Rate</th><th>Прибыль</th></tr>';
+  for (const k in map) {
+    const m = map[k];
+    html += `<tr><td>${k}</td><td>${m.count}</td><td>${(m.wins/m.count*100).toFixed(1)}%</td>
+      <td class="${m.profit>0?'win':'loss'}">${m.profit.toFixed(2)} ₽</td></tr>`;
+  }
+  html += '</table>';
+  instrStats.innerHTML = html;
 }
 
 function renderChart() {
@@ -216,9 +278,9 @@ function calcPlan() {
 }
 
 function exportExcel() {
-  let csv = 'Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Прибыль,R:R,Результат\n';
+  let csv = 'Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Прибыль,R:R,Время,Результат\n';
   trades.forEach(t => {
-    csv += `${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.profit.toFixed(2)},${t.rr.toFixed(2)},${t.result}\n`;
+    csv += `${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.profit.toFixed(2)},${t.rr.toFixed(2)},${t.time},${t.result}\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
