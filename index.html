@@ -355,7 +355,29 @@ async function importData(event) {
   const file = event.target.files[0];
   if (!file) return;
   const text = await file.text();
-  const data = JSON.parse(text);
+  let data = JSON.parse(text);
+
+  // Очистка и пересчёт
+  data = data
+    .filter(t => t.instr && t.qty > 0) // убираем пустые
+    .map(t => {
+      t.stop = t.stop || t.entry;       // если стоп 0 или null
+      t.commIn = t.commIn || 0;
+      t.commOut = t.commOut || 0;
+      t.tarif = t.tarif || 0;
+      t.topup = t.topup || 0;
+
+      const gross = t.dir === 'Long'
+        ? (t.exit - t.entry) * t.qty
+        : (t.entry - t.exit) * t.qty;
+      t.profit = gross - t.commIn - t.commOut - t.tarif;
+
+      t.risk = Math.abs(t.entry - t.stop) * t.qty;
+      t.rr = t.risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
+      t.result = t.profit > 0 ? 'Win' : t.profit < 0 ? 'Loss' : 'BE';
+      return t;
+    });
+
   await db.trades.bulkPut(data);
   loadTrades();
 }
