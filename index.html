@@ -220,11 +220,19 @@ function render() {
   tbody.innerHTML = '';
   list.forEach(t => {
     tbody.innerHTML += `<tr>
-      <td>${t.id}</td><td>${t.date||'-'}</td><td>${t.instr}</td><td>${t.dir}</td>
-      <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
-      <td>${t.commIn}</td><td>${t.commOut}</td>
+      <td>${t.id}</td>
+      <td>${t.date||'-'}</td>
+      <td>${t.instr}</td>
+      <td>${t.dir}</td>
+      <td>${t.entry}</td>
+      <td>${t.exit}</td>
+      <td>${t.stop}</td>
+      <td>${t.qty}</td>
+      <td>${t.commIn}</td>
+      <td>${t.commOut}</td>
       <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
-      <td>${t.rr.toFixed(2)}</td><td>${t.time}</td>
+      <td>${t.rr.toFixed(2)}</td>
+      <td>${t.time}</td>
       <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
       <td>
         <button class="edit-btn" onclick="editTrade(${t.id})">✏️</button>
