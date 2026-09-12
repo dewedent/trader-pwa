@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4caf50">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dexie@3/dist/dexie.min.js"></script>
 <style>
   :root {
     --bg:#111; --card:#1e1e1e; --text:#eee; --accent:#4caf50; --loss:#f44336;
@@ -48,59 +49,40 @@
 
 <div class="card">
   <h2>➕ Добавить сделку</h2>
-
   <label>Инструмент</label>
   <input id="instr" placeholder="Например, Новатэк">
 
   <label>Направление</label>
   <select id="dir"><option>Long</option><option>Short</option></select>
 
-  <label>Цена входа</label>
-  <input id="entry" type="number">
-
-  <label>Цена выхода</label>
-  <input id="exit" type="number">
-
-  <label>Стоп-лосс</label>
-  <input id="stop" type="number">
-
-  <label>Количество акций</label>
-  <input id="qty" type="number">
-
-  <label>Комиссия, %</label>
-  <input id="comm" type="number">
-
-  <label>Тариф, ₽</label>
-  <input id="tarif" type="number">
-
-  <label>Пополнение, ₽</label>
-  <input id="topup" type="number">
-
-  <label>Дата</label>
-  <input id="date" type="date">
-
-  <label>Время</label>
-  <input id="time" type="time">
+  <label>Цена входа</label><input id="entry" type="number">
+  <label>Цена выхода</label><input id="exit" type="number">
+  <label>Стоп-лосс</label><input id="stop" type="number">
+  <label>Количество акций</label><input id="qty" type="number">
+  <label>Комиссия, %</label><input id="comm" type="number">
+  <label>Тариф, ₽</label><input id="tarif" type="number">
+  <label>Пополнение, ₽</label><input id="topup" type="number">
+  <label>Дата</label><input id="date" type="date">
+  <label>Время</label><input id="time" type="time">
 
   <button onclick="addTrade()">Добавить</button>
 </div>
 
 <div class="card">
+  <h2>💾 Резервная копия</h2>
+  <button onclick="exportData()">📤 Экспорт в файл</button>
+  <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+</div>
+
+<div class="card">
   <h2>📅 Фильтр по датам</h2>
-  <label>От</label>
-  <input id="filterFrom" type="date" onchange="render()">
-  <label>До</label>
-  <input id="filterTo" type="date" onchange="render()">
+  <label>От</label><input id="filterFrom" type="date" onchange="render()">
+  <label>До</label><input id="filterTo" type="date" onchange="render()">
   <button onclick="clearFilter()">Сбросить фильтр</button>
 </div>
 
-<div class="card">
-  <h2>📊 Статистика</h2>
-  <div id="stats"></div>
-</div>
-
-<div class="card">
-  <h2>🎯 Планировщик</h2>
+<div class="card"><h2>📊 Статистика</h2><div id="stats"></div></div>
+<div class="card"><h2>🎯 Планировщик</h2>
   <input id="goal" placeholder="Цель, ₽" type="number">
   <select id="period">
     <option value="5">1 неделя</option>
@@ -111,20 +93,9 @@
   <div id="planResult"></div>
 </div>
 
-<div class="card">
-  <h2>📈 График доходности и просадки</h2>
-  <canvas id="equityChart"></canvas>
-</div>
-
-<div class="card">
-  <h2>🧠 Советы</h2>
-  <div id="advice"></div>
-</div>
-
-<div class="card">
-  <h2>📊 По инструментам</h2>
-  <div id="instrStats"></div>
-</div>
+<div class="card"><h2>📈 График доходности и просадки</h2><canvas id="equityChart"></canvas></div>
+<div class="card"><h2>🧠 Советы</h2><div id="advice"></div></div>
+<div class="card"><h2>📊 По инструментам</h2><div id="instrStats"></div></div>
 
 <div class="card">
   <h2>📋 Сделки</h2>
@@ -142,14 +113,21 @@
 </div>
 
 <script>
-let trades = JSON.parse(localStorage.getItem('trades') || '[]');
+const db = new Dexie('TraderDB');
+db.version(1).stores({ trades: '++id, instr, date' });
+
+let trades = [];
 let editIndex = -1;
 let chart;
 
-function save() { localStorage.setItem('trades', JSON.stringify(trades)); }
 function toggleTheme() { document.body.classList.toggle('light'); }
 
-function addTrade() {
+async function loadTrades() {
+  trades = await db.trades.toArray();
+  render();
+}
+
+async function addTrade() {
   const t = {
     instr: instr.value, dir: dir.value,
     entry: +entry.value, exit: +exit.value, stop: +stop.value,
@@ -169,13 +147,15 @@ function addTrade() {
   t.result = profit > 0 ? 'Win' : profit < 0 ? 'Loss' : 'BE';
 
   if (editIndex >= 0) {
-    trades[editIndex] = t;
+    t.id = trades[editIndex].id;
+    await db.trades.put(t);
     editIndex = -1;
   } else {
-    trades.push(t);
+    await db.trades.add(t);
   }
 
-  save(); render(); clearFields();
+  clearFields();
+  loadTrades();
 }
 
 function clearFields() {
@@ -184,33 +164,32 @@ function clearFields() {
   tarif.value=''; topup.value=''; date.value=''; time.value='';
 }
 
-function deleteTrade(i) {
+async function deleteTrade(id) {
   if (!confirm('Удалить сделку?')) return;
-  trades.splice(i, 1); save(); render();
+  await db.trades.delete(id);
+  loadTrades();
 }
 
-function editTrade(i) {
-  const t = trades[i];
-  instr.value = t.instr; dir.value = t.dir;
-  entry.value = t.entry; exit.value = t.exit; stop.value = t.stop;
-  qty.value = t.qty; comm.value = t.comm; tarif.value = t.tarif;
-  topup.value = t.topup; date.value = t.date; time.value = t.time;
-  editIndex = i;
+function editTrade(id) {
+  const t = trades.find(x => x.id === id);
+  instr.value=t.instr; dir.value=t.dir;
+  entry.value=t.entry; exit.value=t.exit; stop.value=t.stop;
+  qty.value=t.qty; comm.value=t.comm; tarif.value=t.tarif;
+  topup.value=t.topup; date.value=t.date; time.value=t.time;
+  editIndex = trades.indexOf(t);
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
-function resetAll() {
-  if (!confirm('Удалить ВСЕ сделки? Это нельзя отменить.')) return;
-  trades = []; save(); render();
+async function resetAll() {
+  if (!confirm('Удалить ВСЕ сделки?')) return;
+  await db.trades.clear();
+  loadTrades();
 }
 
-function clearFilter() {
-  filterFrom.value = ''; filterTo.value = ''; render();
-}
+function clearFilter() { filterFrom.value=''; filterTo.value=''; render(); }
 
 function getFiltered() {
-  const from = filterFrom.value;
-  const to = filterTo.value;
+  const from = filterFrom.value, to = filterTo.value;
   return trades.filter(t => {
     if (from && t.date < from) return false;
     if (to && t.date > to) return false;
@@ -222,20 +201,16 @@ function render() {
   const list = getFiltered();
   const tbody = document.querySelector('#tradesTable tbody');
   tbody.innerHTML = '';
-  list.forEach((t) => {
-    const realIndex = trades.indexOf(t);
+  list.forEach(t => {
     tbody.innerHTML += `<tr>
-      <td>${realIndex+1}</td>
-      <td>${t.date || '-'}</td>
-      <td>${t.instr}</td><td>${t.dir}</td>
+      <td>${t.id}</td><td>${t.date||'-'}</td><td>${t.instr}</td><td>${t.dir}</td>
       <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
       <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
-      <td>${t.rr.toFixed(2)}</td>
-      <td>${t.time}</td>
+      <td>${t.rr.toFixed(2)}</td><td>${t.time}</td>
       <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
       <td>
-        <button class="edit-btn" onclick="editTrade(${realIndex})">✏️</button>
-        <button class="del-btn" onclick="deleteTrade(${realIndex})">🗑</button>
+        <button class="edit-btn" onclick="editTrade(${t.id})">✏️</button>
+        <button class="del-btn" onclick="deleteTrade(${t.id})">🗑</button>
       </td>
     </tr>`;
   });
@@ -246,8 +221,7 @@ function render() {
   const avgRR = list.length ? list.reduce((s, t) => s + t.rr, 0) / list.length : 0;
   const winRate = list.length ? wins / list.length * 100 : 0;
   const deposit = list.reduce((s, t) => s + t.profit + t.topup, 0);
-
-  let peak = 0, acc = 0, maxDD = 0;
+  let peak=0, acc=0, maxDD=0;
   list.forEach(t => {
     acc += t.profit + t.topup;
     if (acc > peak) peak = acc;
@@ -288,7 +262,7 @@ function renderInstrStats(list) {
     if (t.result === 'Win') map[t.instr].wins++;
     map[t.instr].profit += t.profit;
   });
-  let html = '<table><tr><th>Инструмент</th><th>Сделок</th><th>Win Rate</th><th>Прибыль</th></tr>';
+  let html = '<table><tr><th>Инструмент</th><th>Сделок</th><th>Win Rate</th.push><th>Прибыль</th></tr>';
   for (const k in map) {
     const m = map[k];
     html += `<tr><td>${k}</td><td>${m.count}</td><td>${(m.wins/m.count*100).toFixed(1)}%</td>
@@ -299,23 +273,20 @@ function renderInstrStats(list) {
 }
 
 function renderChart(list) {
-  let acc = 0, peak = 0;
-  const labels = [], data = [], dd = [];
+  let acc=0, peak=0;
+  const labels=[], data=[], dd=[];
   list.forEach((t, i) => {
     acc += t.profit + t.topup;
     if (acc > peak) peak = acc;
-    labels.push(i+1); data.push(acc); dd.push(peak - acc);
+    labels.push(i+1); data.push(acc); dd(peak - acc);
   });
   if (chart) chart.destroy();
   chart = new Chart(document.getElementById('equityChart'), {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Депозит', data, borderColor: '#4caf50', backgroundColor:'rgba(76,175,80,0.2)', fill:true, tension:0.3 },
-        { label: 'Просадка', data: dd, borderColor: '#f44336', backgroundColor:'rgba(244,67,54,0.2)', fill:true, tension:0.3 }
-      ]
-    },
+    data: { labels, datasets: [
+      { label: 'Депозит', data, borderColor: '#4caf50', backgroundColor:'rgba(76,175,80,0.2)', fill:true, tension:0.3 },
+      { label: 'Просадка', data: dd, borderColor: '#f44336', backgroundColor:'rgba(244,67,54,0.2)', fill:true, tension:0.3 }
+    ]},
     options: { plugins: { legend: { labels: { color: '#888' } } } }
   });
 }
@@ -341,16 +312,32 @@ function exportExcel() {
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'trades.csv'; a.click();
+}
+
+async function exportData() {
+  const data = await db.trades.toArray();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'trades.csv';
+  a.download = 'trader_backup.json';
   a.click();
+}
+
+async function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const data = JSON.parse(text);
+  await db.trades.bulkPut(data);
+  loadTrades();
 }
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./service-worker.js');
 }
 
-render();
+loadTrades();
 </script>
 </body>
 </html>
