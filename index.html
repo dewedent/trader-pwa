@@ -32,6 +32,41 @@
   .danger { background:var(--loss); }
   .cancel { background:#555; }
   .edit-mode { color:#ffc107; margin-bottom:10px; font-weight:bold; }
+
+  /* === TOOLTIPS === */
+  .tip {
+    display:inline-block;
+    margin-left:6px;
+    width:16px; height:16px;
+    line-height:16px;
+    text-align:center;
+    border-radius:50%;
+    background:#444;
+    color:#4caf50;
+    font-size:11px;
+    font-weight:bold;
+    cursor:help;
+    position:relative;
+    vertical-align:middle;
+  }
+  .tip:hover::after {
+    content: attr(data-tip);
+    position:absolute;
+    left:0; top:22px;
+    background:#000;
+    color:#fff;
+    padding:6px 10px;
+    border-radius:6px;
+    font-size:12px;
+    font-weight:normal;
+    white-space:normal;
+    width:220px;
+    z-index:100;
+    box-shadow:0 4px 12px rgba(0,0,0,0.6);
+    border:1px solid #4caf50;
+  }
+  .light .tip { background:#ccc; color:#2e7d32; }
+  .light .tip:hover::after { background:#333; }
 </style>
 </head>
 <body>
@@ -39,74 +74,161 @@
 <button onclick="toggleTheme()">🌙 / ☀️ Тема</button>
 <h1>📒 Дневник трейдера</h1>
 
+<!-- ===== КАЛЬКУЛЯТОР R:R ===== -->
 <div class="card">
-  <h2>🧮 Калькулятор R:R</h2>
-  
-  <label>Цена входа</label>
+  <h2>🧮 Калькулятор R:R
+    <span class="tip" data-tip="Введи цену входа и стоп — калькулятор покажет, куда ставить тейк-профит для хорошего R:R.">?</span>
+  </h2>
+
+  <label>Цена входа
+    <span class="tip" data-tip="Цена, по которой ты собираешься купить актив.">?</span>
+  </label>
   <input id="calcEntry" type="number" step="any" placeholder="1000">
-  
-  <label>Стоп-лосс (цена)</label>
+
+  <label>Стоп-лосс (цена)
+    <span class="tip" data-tip="Цена, на которой ты выйдешь из сделки, если она пойдёт против тебя. Ставь чуть ниже уровня поддержки.">?</span>
+  </label>
   <input id="calcStop" type="number" step="any" placeholder="990">
-  
-  <label>Желаемый R:R (например, 2 для 1:2)</label>
+
+  <label>Желаемый R:R
+    <span class="tip" data-tip="Соотношение риск/прибыль. 2 означает 1:2 — прибыль в 2 раза больше риска. Норма — от 2.">?</span>
+  </label>
   <input id="calcRR" type="number" step="any" value="2">
-  
+
   <button onclick="calcTPSL()">Рассчитать TP</button>
-  
+
   <div id="calcResult" style="margin-top:10px;"></div>
   <button class="cancel" onclick="applyCalc()">📋 Применить в форму сделки</button>
 </div>
-  
+
+<!-- ===== ДОБАВИТЬ СДЕЛКУ ===== -->
 <div class="card">
-  <h2>➕ Добавить сделку</h2>
+  <h2>➕ Добавить сделку
+    <span class="tip" data-tip="Заполни поля после входа в сделку или после её закрытия. R:R считается автоматически.">?</span>
+  </h2>
   <div id="editMode" class="edit-mode"></div>
-  <label>Инструмент</label><input id="instr">
-  <label>Направление</label>
+
+  <label>Инструмент
+    <span class="tip" data-tip="Название акции или фьючерса (например, NVTK, OZON, SBER).">?</span>
+  </label>
+  <input id="instr">
+
+  <label>Направление
+    <span class="tip" data-tip="Long — покупка (ждёшь роста). Short — продажа (ждёшь падения).">?</span>
+  </label>
   <select id="dir"><option>Long</option><option>Short</option></select>
-  <label>Цена входа</label><input id="entry" type="number" step="any">
-  <label>Цена выхода</label><input id="exit" type="number" step="any">
-  <label>Стоп-лосс (изначальный!)</label><input id="stop" type="number" step="any">
-  <label>Количество акций</label><input id="qty" type="number" step="any">
-  <label>Комиссия за вход, ₽</label><input id="commIn" type="number" step="any">
-  <label>Комиссия за выход, ₽</label><input id="commOut" type="number" step="any">
-  <label>Тариф, ₽</label><input id="tarif" type="number" step="any">
-  <label>Пополнение, ₽</label><input id="topup" type="number" step="any">
-  <label>Дата</label><input id="date" type="date">
-  <label>Время</label><input id="time" type="time">
+
+  <label>Цена входа
+    <span class="tip" data-tip="Цена, по которой ты вошёл в сделку.">?</span>
+  </label>
+  <input id="entry" type="number" step="any">
+
+  <label>Цена выхода
+    <span class="tip" data-tip="Цена, по которой ты закрыл сделку. Оставь пустым, если сделка ещё открыта.">?</span>
+  </label>
+  <input id="exit" type="number" step="any">
+
+  <label>Стоп-лосс (изначальный!)
+    <span class="tip" data-tip="Первоначальный стоп, который ты ставил при входе — ДО того, как передвинул в безубыток. Нужен для правильного R:R.">?</span>
+  </label>
+  <input id="stop" type="number" step="any">
+
+  <label>Количество акций
+    <span class="tip" data-tip="Сколько акций/лотов ты купил или продал.">?</span>
+  </label>
+  <input id="qty" type="number" step="any">
+
+  <label>Комиссия за вход, ₽
+    <span class="tip" data-tip="Комиссия брокера за покупку. На тарифе «Трейдер» — 0,05% от суммы сделки.">?</span>
+  </label>
+  <input id="commIn" type="number" step="any">
+
+  <label>Комиссия за выход, ₽
+    <span class="tip" data-tip="Комиссия брокера за продажу.">?</span>
+  </label>
+  <input id="commOut" type="number" step="any">
+
+  <label>Тариф, ₽
+    <span class="tip" data-tip="Абонентская плата за тариф (например, 390 ₽ за «Трейдер»). Списывается раз в месяц.">?</span>
+  </label>
+  <input id="tarif" type="number" step="any">
+
+  <label>Пополнение, ₽
+    <span class="tip" data-tip="Если ты вносил деньги на счёт в этот день — укажи сумму. Лучше использовать отдельный блок «Пополнение депозита».">?</span>
+  </label>
+  <input id="topup" type="number" step="any">
+
+  <label>Дата
+    <span class="tip" data-tip="Дата сделки. По умолчанию — сегодня.">?</span>
+  </label>
+  <input id="date" type="date">
+
+  <label>Время
+    <span class="tip" data-tip="Время входа в сделку. Помогает анализировать, в какие часы ты торгуешь лучше.">?</span>
+  </label>
+  <input id="time" type="time">
+
   <button onclick="addTrade()">💾 Сохранить</button>
   <button class="cancel" onclick="clearFields()">❌ Отмена</button>
 </div>
-  
+
+<!-- ===== ПОПОЛНЕНИЕ ДЕПОЗИТА ===== -->
 <div class="card">
-  <h2>💰 Пополнение депозита</h2>
-  <label>Сумма, ₽</label>
+  <h2>💰 Пополнение депозита
+    <span class="tip" data-tip="Вноси деньги на счёт без создания сделки. Они учтутся в депозите, но не повлияют на Win Rate и R:R.">?</span>
+  </h2>
+  <label>Сумма, ₽
+    <span class="tip" data-tip="Сколько ты внёс на счёт.">?</span>
+  </label>
   <input id="topupAmount" type="number" step="any" placeholder="Например, 5000">
-  <label>Дата</label>
+
+  <label>Дата
+    <span class="tip" data-tip="Дата пополнения.">?</span>
+  </label>
   <input id="topupDate" type="date">
-  <label>Комментарий (необязательно)</label>
+
+  <label>Комментарий (необязательно)
+    <span class="tip" data-tip="Например: «довнёс из зарплаты» или «перевёл с другого счёта».">?</span>
+  </label>
   <input id="topupNote" placeholder="Например: довнёс из зарплаты">
+
   <button onclick="addTopup()">➕ Добавить пополнение</button>
   <div id="topupList" style="margin-top:10px;"></div>
 </div>
-  
+
+<!-- ===== РЕЗЕРВНАЯ КОПИЯ ===== -->
 <div class="card">
-  <h2>💾 Резервная копия</h2>
+  <h2>💾 Резервная копия
+    <span class="tip" data-tip="Экспортируй данные в JSON-файл, чтобы не потерять их. Импорт — для восстановления.">?</span>
+  </h2>
   <button onclick="exportData()">📤 Экспорт в файл</button>
   <input type="file" id="importFile" accept=".json" style="display:none">
   <button onclick="document.getElementById('importFile').click()">📥 Импорт из файла</button>
 </div>
 
+<!-- ===== ФИЛЬТР ===== -->
 <div class="card">
-  <h2>📅 Фильтр по датам</h2>
+  <h2>📅 Фильтр по датам
+    <span class="tip" data-tip="Показывает сделки за выбранный период. Удобно для анализа недели или месяца.">?</span>
+  </h2>
   <label>От</label><input id="filterFrom" type="date" onchange="render()">
   <label>До</label><input id="filterTo" type="date" onchange="render()">
   <button onclick="clearFilter()">Сбросить фильтр</button>
 </div>
 
-<div class="card"><h2>📊 Статистика</h2><div id="stats"></div></div>
-
+<!-- ===== СТАТИСТИКА ===== -->
 <div class="card">
-  <h2>🎯 Планировщик</h2>
+  <h2>📊 Статистика
+    <span class="tip" data-tip="Win Rate — процент прибыльных сделок. R:R — среднее соотношение риск/прибыль. Просадка — максимальная потеря от пика.">?</span>
+  </h2>
+  <div id="stats"></div>
+</div>
+
+<!-- ===== ПЛАНИРОВЩИК ===== -->
+<div class="card">
+  <h2>🎯 Планировщик
+    <span class="tip" data-tip="Считает, какой депозит нужен для цели, исходя из Win Rate 60% и R:R 1:2.">?</span>
+  </h2>
   <input id="goal" placeholder="Цель, ₽" type="number">
   <select id="period">
     <option value="5">1 неделя</option>
@@ -117,12 +239,35 @@
   <div id="planResult"></div>
 </div>
 
-<div class="card"><h2>📈 График доходности и просадки</h2><canvas id="equityChart"></canvas></div>
-<div class="card"><h2>🧠 Советы</h2><div id="advice"></div></div>
-<div class="card"><h2>📊 По инструментам</h2><div id="instrStats"></div></div>
-
+<!-- ===== ГРАФИК ===== -->
 <div class="card">
-  <h2>📋 Сделки</h2>
+  <h2>📈 График доходности и просадки
+    <span class="tip" data-tip="Зелёная линия — рост депозита. Красная — просадка (насколько ты откатился от максимума).">?</span>
+  </h2>
+  <canvas id="equityChart"></canvas>
+</div>
+
+<!-- ===== СОВЕТЫ ===== -->
+<div class="card">
+  <h2>🧠 Советы
+    <span class="tip" data-tip="Автоматические подсказки на основе твоей статистики.">?</span>
+  </h2>
+  <div id="advice"></div>
+</div>
+
+<!-- ===== ПО ИНСТРУМЕНТАМ ===== -->
+<div class="card">
+  <h2>📊 По инструментам
+    <span class="tip" data-tip="Показывает, какой актив приносит тебе больше всего прибыли.">?</span>
+  </h2>
+  <div id="instrStats"></div>
+</div>
+
+<!-- ===== ТАБЛИЦА СДЕЛОК ===== -->
+<div class="card">
+  <h2>📋 Сделки
+    <span class="tip" data-tip="Все твои сделки. Кнопка ✏️ — редактировать, 🗑 — удалить.">?</span>
+  </h2>
   <button onclick="exportExcel()">📥 Экспорт в Excel</button>
   <button class="danger" onclick="resetAll()">🗑 Сбросить всё</button>
   <table id="tradesTable">
@@ -151,7 +296,7 @@ async function loadTrades() {
   trades = await db.trades.toArray();
   render();
 }
-  
+
 async function addTopup() {
   const amount = +document.getElementById('topupAmount').value;
   const date = document.getElementById('topupDate').value || new Date().toISOString().slice(0, 10);
@@ -180,7 +325,7 @@ async function addTopup() {
   alert('✅ Пополнение добавлено!');
   loadTrades();
 }
-  
+
 async function addTrade() {
   const t = {
     instr: document.getElementById('instr').value.trim(),
@@ -202,16 +347,14 @@ async function addTrade() {
     return;
   }
 
-  // Прибыль
   const gross = t.dir === 'Long'
     ? (t.exit - t.entry) * t.qty
     : (t.entry - t.exit) * t.qty;
   t.profit = gross - t.commIn - t.commOut - t.tarif;
 
-  // === R:R ===
   const riskPerShare = Math.abs(t.entry - t.stop);
   if (riskPerShare === 0) {
-    t.risk = t.entry * 0.01 * t.qty; // 1% от входа, если стоп = вход
+    t.risk = t.entry * 0.01 * t.qty;
     t.rr = 0;
   } else {
     t.risk = riskPerShare * t.qty;
@@ -242,7 +385,7 @@ function clearFields() {
 }
 
 async function deleteTrade(id) {
-  if (!confirm('Удалить сделку?')) return;
+  if (!confirm('Удалить запись?')) return;
   await db.trades.delete(id);
   loadTrades();
 }
@@ -270,7 +413,7 @@ function editTrade(id) {
 }
 
 async function resetAll() {
-  if (!confirm('Удалить ВСЕ сделки?')) return;
+  if (!confirm('Удалить ВСЕ сделки и пополнения?')) return;
   await db.trades.clear();
   loadTrades();
 }
@@ -292,12 +435,10 @@ function getFiltered() {
 }
 
 function render() {
-  // Сделки — только type: 'trade' (или без type для старых записей)
   const allItems = getFiltered();
   const list = allItems.filter(t => !t.type || t.type === 'trade');
   const topups = allItems.filter(t => t.type === 'topup');
 
-  // === ТАБЛИЦА СДЕЛОК ===
   const tbody = document.querySelector('#tradesTable tbody');
   tbody.innerHTML = '';
   list.forEach(t => {
@@ -315,7 +456,6 @@ function render() {
     </tr>`;
   });
 
-  // === СПИСОК ПОПОЛНЕНИЙ ===
   const topupListEl = document.getElementById('topupList');
   if (topupListEl) {
     if (topups.length === 0) {
@@ -330,7 +470,6 @@ function render() {
     }
   }
 
-  // === СТАТИСТИКА (только по сделкам!) ===
   const wins = list.filter(t => t.result === 'Win').length;
   const losses = list.filter(t => t.result === 'Loss').length;
   const tradeProfit = list.reduce((s, t) => s + t.profit, 0);
@@ -340,7 +479,6 @@ function render() {
   const deposit = tradeProfit + totalTopup;
 
   let peak = 0, acc = 0, maxDD = 0;
-  // Просадка считается по сделкам + пополнениям в хронологии
   const sorted = [...allItems].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   sorted.forEach(t => {
     const delta = (t.type === 'topup') ? t.topup : t.profit;
@@ -460,8 +598,10 @@ async function importData(event) {
   let data = JSON.parse(text);
 
   data = data
-    .filter(t => t.instr && t.qty > 0)
+    .filter(t => t.instr && (t.qty > 0 || t.type === 'topup'))
     .map(t => {
+      if (t.type === 'topup') return t;
+
       t.stop = t.stop || t.entry;
       t.commIn = t.commIn || 0;
       t.commOut = t.commOut || 0;
@@ -488,7 +628,7 @@ async function importData(event) {
 
   await db.trades.bulkPut(data);
   loadTrades();
-  alert('✅ Загружено сделок: ' + data.length);
+  alert('✅ Загружено записей: ' + data.length);
 }
 
 document.getElementById('importFile').addEventListener('change', importData);
@@ -508,56 +648,18 @@ function calcTPSL() {
     return;
   }
 
-  // Считаем риск и прибыль
   const risk = Math.abs(entry - stop);
   const reward = risk * rr;
   const isLong = entry > stop;
   const tp = isLong ? entry + reward : entry - reward;
 
-  // Дополнительно считаем R:R для разных TP (1:2, 1:3, 1:4)
   const tp2 = isLong ? entry + risk * 2 : entry - risk * 2;
   const tp3 = isLong ? entry + risk * 3 : entry - risk * 3;
   const tp4 = isLong ? entry + risk * 4 : entry - risk * 4;
 
-  // Оценка сделки
   let quality = '';
   let color = '';
   if (rr >= 3) { quality = '🔥 Отличная сделка'; color = '#4caf50'; }
   else if (rr >= 2) { quality = '✅ Хорошая сделка'; color = '#4caf50'; }
   else if (rr >= 1.5) { quality = '⚠️ Средняя сделка'; color = '#ffc107'; }
-  else { quality = '❌ Плохая сделка (R:R < 1.5)'; color = '#f44336'; }
-
-  document.getElementById('calcResult').innerHTML = `
-    <p>📉 Риск на акцию: <b>${risk.toFixed(2)} ₽</b></p>
-    <p>📈 Прибыль на акцию: <b>${reward.toFixed(2)} ₽</b></p>
-    <p>🎯 Цена TP для R:R 1:${rr}: <b>${tp.toFixed(2)} ₽</b></p>
-    <hr style="border-color:#333; margin:10px 0;">
-    <p style="font-size:13px; opacity:0.8;">Варианты TP для разных R:R:</p>
-    <p style="font-size:13px;">1:2 → <b>${tp2.toFixed(2)} ₽</b></p>
-    <p style="font-size:13px;">1:3 → <b>${tp3.toFixed(2)} ₽</b></p>
-    <p style="font-size:13px;">1:4 → <b>${tp4.toFixed(2)} ₽</b></p>
-    <hr style="border-color:#333; margin:10px 0;">
-    <p style="color:${color}; font-weight:bold;">${quality}</p>
-  `;
-
-  // Сохраняем для applyCalc
-  window._calcTP = tp;
-  window._calcSL = stop;
-  window._calcEntry = entry;
-}
-
-function applyCalc() {
-  if (!window._calcEntry) {
-    alert('Сначала нажми "Рассчитать TP"');
-    return;
-  }
-  document.getElementById('entry').value = window._calcEntry;
-  document.getElementById('stop').value = window._calcSL;
-  document.getElementById('exit').value = window._calcTP;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-  
-loadTrades();
-</script>
-</body>
-</html>
+  else { quality = '❌ Плохая сделка
