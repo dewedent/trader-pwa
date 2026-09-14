@@ -40,6 +40,21 @@
 <h1>📒 Дневник трейдера</h1>
 
 <div class="card">
+  <h2>🧮 Калькулятор TP / SL</h2>
+  <label>Цена входа</label>
+  <input id="calcEntry" type="number" step="any" placeholder="Например, 1000">
+  <label>Стоп-лосс (цена)</label>
+  <input id="calcStop" type="number" step="any" placeholder="Например, 990">
+  <label>Соотношение R:R (например, 2 для 1:2)</label>
+  <input id="calcRR" type="number" step="any" value="2">
+  <label>Комиссия (в обе стороны), ₽</label>
+  <input id="calcComm" type="number" step="any" value="2">
+  <button onclick="calcTPSL()">Рассчитать TP</button>
+  <div id="calcResult" style="margin-top:10px;"></div>
+  <button class="cancel" onclick="applyCalc()">📋 Применить в форму</button>
+</div>
+  
+<div class="card">
   <h2>➕ Добавить сделку</h2>
   <div id="editMode" class="edit-mode"></div>
   <label>Инструмент</label><input id="instr">
@@ -407,6 +422,57 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./service-worker.js');
 }
 
+// === КАЛЬКУЛЯТОР TP/SL ===
+function calcTPSL() {
+  const entry = +document.getElementById('calcEntry').value;
+  const stop = +document.getElementById('calcStop').value;
+  const rr = +document.getElementById('calcRR').value;
+
+  if (!entry || !stop || !rr) {
+    document.getElementById('calcResult').innerHTML = '<p style="color:#f44336;">⚠️ Заполни все поля!</p>';
+    return;
+  }
+
+  const risk = Math.abs(entry - stop);
+  const reward = risk * rr;
+  const isLong = entry > stop;
+
+  const tp = isLong ? entry + reward : entry - reward;
+  const comm = +document.getElementById('calcComm').value || 0;
+  const netReward = reward - comm;
+  const netRisk = risk + comm;
+  document.getElementById('calcResult').innerHTML += `
+    <p>💸 Чистая прибыль: <b>${netReward.toFixed(2)} ₽</b></p>
+    <p>💸 Чистый риск: <b>${netRisk.toFixed(2)} ₽</b></p>
+  `;
+  
+  document.getElementById('calcResult').innerHTML = `
+    <p>📉 Риск (SL): <b>${risk.toFixed(2)} ₽</b></p>
+    <p>📈 Прибыль (TP): <b>${reward.toFixed(2)} ₽</b></p>
+    <p>🎯 Цена TP: <b>${tp.toFixed(2)} ₽</b></p>
+    <p>⚖️ R:R = <b>1 : ${rr}</b></p>
+    <p style="color:${rr >= 2 ? '#4caf50' : '#ffc107'};">
+      ${rr >= 2 ? '✅ Хорошая сделка' : '⚠️ R:R ниже 2 — рискованно'}
+    </p>
+  `;
+
+  // Сохраняем для applyCalc
+  window._calcTP = tp;
+  window._calcSL = stop;
+  window._calcEntry = entry;
+}
+
+function applyCalc() {
+  if (!window._calcEntry) {
+    alert('Сначала нажми "Рассчитать TP"');
+    return;
+  }
+  document.getElementById('entry').value = window._calcEntry;
+  document.getElementById('stop').value = window._calcSL;
+  document.getElementById('exit').value = window._calcTP;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+  
 loadTrades();
 </script>
 </body>
