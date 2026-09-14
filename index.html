@@ -76,7 +76,19 @@
   <button onclick="addTrade()">💾 Сохранить</button>
   <button class="cancel" onclick="clearFields()">❌ Отмена</button>
 </div>
-
+  
+<div class="card">
+  <h2>💰 Пополнение депозита</h2>
+  <label>Сумма, ₽</label>
+  <input id="topupAmount" type="number" step="any" placeholder="Например, 5000">
+  <label>Дата</label>
+  <input id="topupDate" type="date">
+  <label>Комментарий (необязательно)</label>
+  <input id="topupNote" placeholder="Например: довнёс из зарплаты">
+  <button onclick="addTopup()">➕ Добавить пополнение</button>
+  <div id="topupList" style="margin-top:10px;"></div>
+</div>
+  
 <div class="card">
   <h2>💾 Резервная копия</h2>
   <button onclick="exportData()">📤 Экспорт в файл</button>
@@ -139,7 +151,36 @@ async function loadTrades() {
   trades = await db.trades.toArray();
   render();
 }
+  
+async function addTopup() {
+  const amount = +document.getElementById('topupAmount').value;
+  const date = document.getElementById('topupDate').value || new Date().toISOString().slice(0, 10);
+  const note = document.getElementById('topupNote').value.trim();
 
+  if (!amount || amount <= 0) {
+    alert('⚠️ Введи сумму пополнения больше 0!');
+    return;
+  }
+
+  await db.trades.add({
+    type: 'topup',
+    topup: amount,
+    date: date,
+    note: note,
+    instr: '💰 Пополнение',
+    dir: '—',
+    entry: 0, exit: 0, stop: 0, qty: 0,
+    commIn: 0, commOut: 0, tarif: 0,
+    profit: 0, rr: 0, risk: 0, result: 'BE',
+    time: '00:00'
+  });
+
+  document.getElementById('topupAmount').value = '';
+  document.getElementById('topupNote').value = '';
+  alert('✅ Пополнение добавлено!');
+  loadTrades();
+}
+  
 async function addTrade() {
   const t = {
     instr: document.getElementById('instr').value.trim(),
@@ -251,7 +292,12 @@ function getFiltered() {
 }
 
 function render() {
-  const list = getFiltered();
+  // Сделки — только type: 'trade' (или без type для старых записей)
+  const allItems = getFiltered();
+  const list = allItems.filter(t => !t.type || t.type === 'trade');
+  const topups = allItems.filter(t => t.type === 'topup');
+
+  // === ТАБЛИЦА СДЕЛОК ===
   const tbody = document.querySelector('#tradesTable tbody');
   tbody.innerHTML = '';
   list.forEach(t => {
@@ -269,16 +315,36 @@ function render() {
     </tr>`;
   });
 
+  // === СПИСОК ПОПОЛНЕНИЙ ===
+  const topupListEl = document.getElementById('topupList');
+  if (topupListEl) {
+    if (topups.length === 0) {
+      topupListEl.innerHTML = '<p style="opacity:0.6; font-size:13px;">Пополнений пока нет.</p>';
+    } else {
+      topupListEl.innerHTML = topups.map(t => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #333;">
+          <span>💰 <b>+${t.topup.toFixed(2)} ₽</b> — ${t.date} ${t.note ? '· ' + t.note : ''}</span>
+          <button class="del-btn" onclick="deleteTrade(${t.id})">🗑</button>
+        </div>
+      `).join('');
+    }
+  }
+
+  // === СТАТИСТИКА (только по сделкам!) ===
   const wins = list.filter(t => t.result === 'Win').length;
   const losses = list.filter(t => t.result === 'Loss').length;
-  const totalProfit = list.reduce((s, t) => s + t.profit, 0);
-  const avgRR = list.length ? list.reduce((s, t) => s + (t.rr||0), 0) / list.length : 0;
+  const tradeProfit = list.reduce((s, t) => s + t.profit, 0);
+  const totalTopup = topups.reduce((s, t) => s + t.topup, 0);
+  const avgRR = list.length ? list.reduce((s, t) => s + (t.rr || 0), 0) / list.length : 0;
   const winRate = list.length ? wins / list.length * 100 : 0;
-  const deposit = list.reduce((s, t) => s + t.profit + t.topup, 0);
+  const deposit = tradeProfit + totalTopup;
 
   let peak = 0, acc = 0, maxDD = 0;
-  list.forEach(t => {
-    acc += t.profit + t.topup;
+  // Просадка считается по сделкам + пополнениям в хронологии
+  const sorted = [...allItems].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  sorted.forEach(t => {
+    const delta = (t.type === 'topup') ? t.topup : t.profit;
+    acc += delta;
     if (acc > peak) peak = acc;
     if (peak - acc > maxDD) maxDD = peak - acc;
   });
@@ -289,13 +355,14 @@ function render() {
     <p>Убыточных: <b class="loss">${losses}</b></p>
     <p>Win Rate: <b>${winRate.toFixed(1)}%</b></p>
     <p>Средний R:R: <b>${avgRR.toFixed(2)}</b></p>
-    <p>Прибыль: <b class="${totalProfit>0?'win':'loss'}">${totalProfit.toFixed(2)} ₽</b></p>
-    <p>Депозит: <b>${deposit.toFixed(2)} ₽</b></p>
+    <p>Прибыль от сделок: <b class="${tradeProfit>0?'win':'loss'}">${tradeProfit.toFixed(2)} ₽</b></p>
+    <p>Пополнений: <b class="win">+${totalTopup.toFixed(2)} ₽</b></p>
+    <p>Депозит (прибыль + пополнения): <b>${deposit.toFixed(2)} ₽</b></p>
     <p>Просадка: <b class="loss">${maxDD.toFixed(2)} ₽</b></p>
   `;
 
-  renderChart(list);
-  renderAdvice(winRate, avgRR, totalProfit, maxDD);
+  renderChart(sorted);
+  renderAdvice(winRate, avgRR, tradeProfit, maxDD);
   renderInstrStats(list);
 }
 
@@ -331,15 +398,19 @@ function renderChart(list) {
   let acc = 0, peak = 0;
   const labels = [], data = [], dd = [];
   list.forEach((t, i) => {
-    acc += t.profit + t.topup;
+    const delta = (t.type === 'topup') ? t.topup : t.profit;
+    acc += delta;
     if (acc > peak) peak = acc;
-    labels.push(i + 1); data.push(acc); dd.push(peak - acc);
+    labels.push(i + 1);
+    data.push(acc);
+    dd.push(peak - acc);
   });
   if (chart) chart.destroy();
   chart = new Chart(document.getElementById('equityChart'), {
     type: 'line',
     data: {
-      labels, datasets: [
+      labels,
+      datasets: [
         { label: 'Депозит', data, borderColor: '#4caf50', backgroundColor: 'rgba(76,175,80,0.2)', fill: true, tension: 0.3 },
         { label: 'Просадка', data: dd, borderColor: '#f44336', backgroundColor: 'rgba(244,67,54,0.2)', fill: true, tension: 0.3 }
       ]
@@ -363,9 +434,10 @@ function calcPlan() {
 }
 
 function exportExcel() {
-  let csv = 'Дата,Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Ком.вход,Ком.выход,Прибыль,R:R,Время,Результат\n';
+  let csv = 'Дата,Тип,Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Ком.вход,Ком.выход,Пополнение,Прибыль,R:R,Время,Результат\n';
   trades.forEach(t => {
-    csv += `${t.date || ''},${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.commIn},${t.commOut},${t.profit.toFixed(2)},${(t.rr || 0).toFixed(2)},${t.time},${t.result}\n`;
+    const type = t.type === 'topup' ? 'Пополнение' : 'Сделка';
+    csv += `${t.date || ''},${type},${t.instr || ''},${t.dir || ''},${t.entry || ''},${t.exit || ''},${t.stop || ''},${t.qty || ''},${t.commIn || 0},${t.commOut || 0},${t.topup || 0},${(t.profit || 0).toFixed(2)},${(t.rr || 0).toFixed(2)},${t.time || ''},${t.result || ''}\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
