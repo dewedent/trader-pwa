@@ -1,4 +1,4 @@
-const CACHE = 'trader-v1';
+const CACHE = 'trader-v2';
 const FILES = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
