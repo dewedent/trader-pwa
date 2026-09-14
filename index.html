@@ -27,9 +27,11 @@
   .loss { color:var(--loss); }
   .card { background:var(--card); padding:15px; border-radius:12px; margin-bottom:15px; }
   canvas { max-height:260px; }
-  .del-btn { background:transparent; color:var(--loss); border:none; font-size:16px; cursor:pointer; }
-  .edit-btn { background:transparent; color:#ffc107; border:none; font-size:16px; cursor:pointer; }
+  .del-btn { background:transparent; color:var(--loss); border:none; font-size:16px; cursor:pointer; width:auto; }
+  .edit-btn { background:transparent; color:#ffc107; border:none; font-size:16px; cursor:pointer; width:auto; }
   .danger { background:var(--loss); }
+  .cancel { background:#555; }
+  .edit-mode { color:#ffc107; margin-bottom:10px; font-weight:bold; }
 </style>
 </head>
 <body>
@@ -39,20 +41,22 @@
 
 <div class="card">
   <h2>➕ Добавить сделку</h2>
+  <div id="editMode" class="edit-mode"></div>
   <label>Инструмент</label><input id="instr">
   <label>Направление</label>
   <select id="dir"><option>Long</option><option>Short</option></select>
-  <label>Цена входа</label><input id="entry" type="number">
-  <label>Цена выхода</label><input id="exit" type="number">
-  <label>Стоп-лосс</label><input id="stop" type="number">
-  <label>Количество акций</label><input id="qty" type="number">
-  <label>Комиссия за вход, ₽</label><input id="commIn" type="number">
-  <label>Комиссия за выход, ₽</label><input id="commOut" type="number">
-  <label>Тариф, ₽</label><input id="tarif" type="number">
-  <label>Пополнение, ₽</label><input id="topup" type="number">
+  <label>Цена входа</label><input id="entry" type="number" step="any">
+  <label>Цена выхода</label><input id="exit" type="number" step="any">
+  <label>Стоп-лосс (изначальный!)</label><input id="stop" type="number" step="any">
+  <label>Количество акций</label><input id="qty" type="number" step="any">
+  <label>Комиссия за вход, ₽</label><input id="commIn" type="number" step="any">
+  <label>Комиссия за выход, ₽</label><input id="commOut" type="number" step="any">
+  <label>Тариф, ₽</label><input id="tarif" type="number" step="any">
+  <label>Пополнение, ₽</label><input id="topup" type="number" step="any">
   <label>Дата</label><input id="date" type="date">
   <label>Время</label><input id="time" type="time">
-  <button onclick="addTrade()">Добавить</button>
+  <button onclick="addTrade()">💾 Сохранить</button>
+  <button class="cancel" onclick="clearFields()">❌ Отмена</button>
 </div>
 
 <div class="card">
@@ -120,32 +124,51 @@ async function loadTrades() {
 
 async function addTrade() {
   const t = {
-    instr: instr.value, dir: dir.value,
-    entry: +entry.value, exit: +exit.value, stop: +stop.value,
-    qty: +qty.value,
-    commIn: +commIn.value || 0,
-    commOut: +commOut.value || 0,
-    tarif: +tarif.value || 0,
-    topup: +topup.value || 0,
-    date: date.value || new Date().toISOString().slice(0,10),
-    time: time.value || '00:00'
+    instr: document.getElementById('instr').value.trim(),
+    dir: document.getElementById('dir').value,
+    entry: +document.getElementById('entry').value,
+    exit: +document.getElementById('exit').value,
+    stop: +document.getElementById('stop').value,
+    qty: +document.getElementById('qty').value,
+    commIn: +document.getElementById('commIn').value || 0,
+    commOut: +document.getElementById('commOut').value || 0,
+    tarif: +document.getElementById('tarif').value || 0,
+    topup: +document.getElementById('topup').value || 0,
+    date: document.getElementById('date').value || new Date().toISOString().slice(0, 10),
+    time: document.getElementById('time').value || '00:00'
   };
 
+  if (!t.instr || !t.entry || !t.qty) {
+    alert('⚠️ Заполни: Инструмент, Цена входа, Количество!');
+    return;
+  }
+
+  // Прибыль
   const gross = t.dir === 'Long'
     ? (t.exit - t.entry) * t.qty
     : (t.entry - t.exit) * t.qty;
   t.profit = gross - t.commIn - t.commOut - t.tarif;
 
-  t.risk = Math.abs(t.entry - t.stop) * t.qty;
-  t.rr = t.risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
+  // === R:R ===
+  const riskPerShare = Math.abs(t.entry - t.stop);
+  if (riskPerShare === 0) {
+    t.risk = t.entry * 0.01 * t.qty; // 1% от входа, если стоп = вход
+    t.rr = 0;
+  } else {
+    t.risk = riskPerShare * t.qty;
+    t.rr = Math.abs(t.exit - t.entry) / riskPerShare;
+  }
+
   t.result = t.profit > 0 ? 'Win' : t.profit < 0 ? 'Loss' : 'BE';
 
   if (editIndex >= 0) {
     t.id = trades[editIndex].id;
     await db.trades.put(t);
     editIndex = -1;
+    alert('✅ Сделка обновлена!');
   } else {
     await db.trades.add(t);
+    alert('✅ Сделка добавлена!');
   }
 
   clearFields();
@@ -153,9 +176,10 @@ async function addTrade() {
 }
 
 function clearFields() {
-  instr.value=''; entry.value=''; exit.value='';
-  stop.value=''; qty.value=''; commIn.value=''; commOut.value='';
-  tarif.value=''; topup.value=''; date.value=''; time.value='';
+  ['instr','entry','exit','stop','qty','commIn','commOut','tarif','topup','date','time']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('editMode').textContent = '';
+  editIndex = -1;
 }
 
 async function deleteTrade(id) {
@@ -166,12 +190,24 @@ async function deleteTrade(id) {
 
 function editTrade(id) {
   const t = trades.find(x => x.id === id);
-  instr.value=t.instr; dir.value=t.dir;
-  entry.value=t.entry; exit.value=t.exit; stop.value=t.stop;
-  qty.value=t.qty; commIn.value=t.commIn; commOut.value=t.commOut;
-  tarif.value=t.tarif; topup.value=t.topup; date.value=t.date; time.value=t.time;
+  if (!t) return;
+
+  document.getElementById('instr').value = t.instr || '';
+  document.getElementById('dir').value = t.dir || 'Long';
+  document.getElementById('entry').value = t.entry || '';
+  document.getElementById('exit').value = t.exit || '';
+  document.getElementById('stop').value = t.stop || '';
+  document.getElementById('qty').value = t.qty || '';
+  document.getElementById('commIn').value = t.commIn || '';
+  document.getElementById('commOut').value = t.commOut || '';
+  document.getElementById('tarif').value = t.tarif || '';
+  document.getElementById('topup').value = t.topup || '';
+  document.getElementById('date').value = t.date || '';
+  document.getElementById('time').value = t.time || '';
+
   editIndex = trades.indexOf(t);
-  window.scrollTo({top:0, behavior:'smooth'});
+  document.getElementById('editMode').textContent = '✏️ Редактируешь: ' + t.instr + ' от ' + (t.date || '');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function resetAll() {
@@ -180,10 +216,15 @@ async function resetAll() {
   loadTrades();
 }
 
-function clearFilter() { filterFrom.value=''; filterTo.value=''; render(); }
+function clearFilter() {
+  document.getElementById('filterFrom').value = '';
+  document.getElementById('filterTo').value = '';
+  render();
+}
 
 function getFiltered() {
-  const from = filterFrom.value, to = filterTo.value;
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
   return trades.filter(t => {
     if (from && t.date < from) return false;
     if (to && t.date > to) return false;
@@ -201,7 +242,7 @@ function render() {
       <td>${t.entry}</td><td>${t.exit}</td><td>${t.stop}</td><td>${t.qty}</td>
       <td>${t.commIn}</td><td>${t.commOut}</td>
       <td class="${t.profit>0?'win':'loss'}">${t.profit.toFixed(2)}</td>
-      <td>${t.rr.toFixed(2)}</td><td>${t.time}</td>
+      <td>${(t.rr||0).toFixed(2)}</td><td>${t.time}</td>
       <td class="${t.result==='Win'?'win':'loss'}">${t.result}</td>
       <td>
         <button class="edit-btn" onclick="editTrade(${t.id})">✏️</button>
@@ -213,18 +254,18 @@ function render() {
   const wins = list.filter(t => t.result === 'Win').length;
   const losses = list.filter(t => t.result === 'Loss').length;
   const totalProfit = list.reduce((s, t) => s + t.profit, 0);
-  const avgRR = list.length ? list.reduce((s, t) => s + t.rr, 0) / list.length : 0;
+  const avgRR = list.length ? list.reduce((s, t) => s + (t.rr||0), 0) / list.length : 0;
   const winRate = list.length ? wins / list.length * 100 : 0;
   const deposit = list.reduce((s, t) => s + t.profit + t.topup, 0);
 
-  let peak=0, acc=0, maxDD=0;
+  let peak = 0, acc = 0, maxDD = 0;
   list.forEach(t => {
     acc += t.profit + t.topup;
     if (acc > peak) peak = acc;
     if (peak - acc > maxDD) maxDD = peak - acc;
   });
 
-  stats.innerHTML = `
+  document.getElementById('stats').innerHTML = `
     <p>Сделок: <b>${list.length}</b></p>
     <p>Прибыльных: <b class="win">${wins}</b></p>
     <p>Убыточных: <b class="loss">${losses}</b></p>
@@ -245,15 +286,15 @@ function renderAdvice(winRate, avgRR, profit, dd) {
   if (trades.length < 10) tips.push('📊 Сделай минимум 10 сделок для статистики.');
   if (winRate < 50 && trades.length >= 10) tips.push('⚠️ Win Rate ниже 50% — проверь входы.');
   if (avgRR < 1.5 && trades.length >= 10) tips.push('📉 R:R ниже 1.5 — ставь дальние тейки.');
-  if (dd > profit * 0.5 && trades.length >= 10) tips.push('⚠️ Просадка большая — снизь риск.');
+  if (dd > Math.abs(profit) * 0.5 && trades.length >= 10) tips.push('⚠️ Просадка большая — снизь риск.');
   if (!tips.length) tips.push('✅ Всё в норме. Продолжай!');
-  advice.innerHTML = tips.map(t => `<p>${t}</p>`).join('');
+  document.getElementById('advice').innerHTML = tips.map(t => `<p>${t}</p>`).join('');
 }
 
 function renderInstrStats(list) {
   const map = {};
   list.forEach(t => {
-    if (!map[t.instr]) map[t.instr] = { count:0, wins:0, profit:0 };
+    if (!map[t.instr]) map[t.instr] = { count: 0, wins: 0, profit: 0 };
     map[t.instr].count++;
     if (t.result === 'Win') map[t.instr].wins++;
     map[t.instr].profit += t.profit;
@@ -261,28 +302,30 @@ function renderInstrStats(list) {
   let html = '<table><tr><th>Инструмент</th><th>Сделок</th><th>Win Rate</th><th>Прибыль</th></tr>';
   for (const k in map) {
     const m = map[k];
-    html += `<tr><td>${k}</td><td>${m.count}</td><td>${(m.wins/m.count*100).toFixed(1)}%</td>
-      <td class="${m.profit>0?'win':'loss'}">${m.profit.toFixed(2)} ₽</td></tr>`;
+    html += `<tr><td>${k}</td><td>${m.count}</td><td>${(m.wins / m.count * 100).toFixed(1)}%</td>
+      <td class="${m.profit > 0 ? 'win' : 'loss'}">${m.profit.toFixed(2)} ₽</td></tr>`;
   }
   html += '</table>';
-  instrStats.innerHTML = html;
+  document.getElementById('instrStats').innerHTML = html;
 }
 
 function renderChart(list) {
-  let acc=0, peak=0;
-  const labels=[], data=[], dd=[];
+  let acc = 0, peak = 0;
+  const labels = [], data = [], dd = [];
   list.forEach((t, i) => {
     acc += t.profit + t.topup;
     if (acc > peak) peak = acc;
-    labels.push(i+1); data.push(acc); dd.push(peak - acc);
+    labels.push(i + 1); data.push(acc); dd.push(peak - acc);
   });
   if (chart) chart.destroy();
   chart = new Chart(document.getElementById('equityChart'), {
     type: 'line',
-    data: { labels, datasets: [
-      { label: 'Депозит', data, borderColor: '#4caf50', backgroundColor:'rgba(76,175,80,0.2)', fill:true, tension:0.3 },
-      { label: 'Просадка', data: dd, borderColor: '#f44336', backgroundColor:'rgba(244,67,54,0.2)', fill:true, tension:0.3 }
-    ]},
+    data: {
+      labels, datasets: [
+        { label: 'Депозит', data, borderColor: '#4caf50', backgroundColor: 'rgba(76,175,80,0.2)', fill: true, tension: 0.3 },
+        { label: 'Просадка', data: dd, borderColor: '#f44336', backgroundColor: 'rgba(244,67,54,0.2)', fill: true, tension: 0.3 }
+      ]
+    },
     options: { plugins: { legend: { labels: { color: '#888' } } } }
   });
 }
@@ -293,18 +336,18 @@ function calcPlan() {
   const wins = n * 0.6, losses = n * 0.4;
   const factor = wins * 2 - losses;
   const risk = goal / factor;
-  planResult.innerHTML = `
+  document.getElementById('planResult').innerHTML = `
     <p>Цель: <b>${goal} ₽</b></p>
     <p>Сделок: <b>${n}</b></p>
     <p>Риск на сделку: <b>${risk.toFixed(2)} ₽</b></p>
-    <p>Нужный депозит: <b>${(risk*100).toFixed(2)} ₽</b></p>
+    <p>Нужный депозит: <b>${(risk * 100).toFixed(2)} ₽</b></p>
   `;
 }
 
 function exportExcel() {
   let csv = 'Дата,Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Ком.вход,Ком.выход,Прибыль,R:R,Время,Результат\n';
   trades.forEach(t => {
-    csv += `${t.date||''},${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.commIn},${t.commOut},${t.profit.toFixed(2)},${t.rr.toFixed(2)},${t.time},${t.result}\n`;
+    csv += `${t.date || ''},${t.instr},${t.dir},${t.entry},${t.exit},${t.stop},${t.qty},${t.commIn},${t.commOut},${t.profit.toFixed(2)},${(t.rr || 0).toFixed(2)},${t.time},${t.result}\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a');
@@ -340,8 +383,15 @@ async function importData(event) {
         : (t.entry - t.exit) * t.qty;
       t.profit = gross - t.commIn - t.commOut - t.tarif;
 
-      t.risk = Math.abs(t.entry - t.stop) * t.qty;
-      t.rr = t.risk === 0 ? 0 : Math.abs(t.exit - t.entry) / Math.abs(t.entry - t.stop);
+      const riskPerShare = Math.abs(t.entry - t.stop);
+      if (riskPerShare === 0) {
+        t.risk = t.entry * 0.01 * t.qty;
+        t.rr = 0;
+      } else {
+        t.risk = riskPerShare * t.qty;
+        t.rr = Math.abs(t.exit - t.entry) / riskPerShare;
+      }
+
       t.result = t.profit > 0 ? 'Win' : t.profit < 0 ? 'Loss' : 'BE';
       return t;
     });
