@@ -1,7 +1,7 @@
 // === Trader Journal Service Worker ===
 // Версия кэша — обновляй при каждом изменении файлов,
 // чтобы браузер подтянул новую версию.
-const CACHE = 'trader-journal-v3';
+const CACHE = 'trader-journal-v4';
 const FILES = [
   './',
   './index.html',
@@ -9,7 +9,6 @@ const FILES = [
   './icon.png'
 ];
 
-// Установка: кэшируем все файлы приложения
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(FILES))
@@ -17,7 +16,6 @@ self.addEventListener('install', e => {
   self.skipWaiting();
 });
 
-// Активация: удаляем старые кэши
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -29,7 +27,6 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Запросы: сначала кэш, потом сеть
 self.addEventListener('fetch', e => {
   e.respondWith(
     caches.match(e.request).then(r => r || fetch(e.request))
