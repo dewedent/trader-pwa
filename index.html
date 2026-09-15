@@ -148,11 +148,6 @@
   </label>
   <input id="commOut" type="number" step="any">
 
-  <label>Тариф, ₽
-    <span class="tip" data-tip="Абонентская плата за тариф (например, 390 ₽ за «Трейдер»). Списывается раз в месяц.">?</span>
-  </label>
-  <input id="tarif" type="number" step="any">
-
   <label>Пополнение, ₽
     <span class="tip" data-tip="Если ты вносил деньги на счёт в этот день — укажи сумму. Лучше использовать отдельный блок «Пополнение депозита».">?</span>
   </label>
@@ -174,28 +169,37 @@
 
 <!-- ===== ПОПОЛНЕНИЕ ДЕПОЗИТА ===== -->
 <div class="card">
-  <h2>💰 Пополнение депозита
-    <span class="tip" data-tip="Вноси деньги на счёт без создания сделки. Они учтутся в депозите, но не повлияют на Win Rate и R:R.">?</span>
+  <h2>💰 Пополнение / Списание
+    <span class="tip" data-tip="Вноси или списывай деньги без создания сделки. Пополнение — со знаком +, списание — со знаком −.">?</span>
   </h2>
-  <label>Сумма, ₽
-    <span class="tip" data-tip="Сколько ты внёс на счёт.">?</span>
+
+  <label>Тип операции
+    <span class="tip" data-tip="Пополнение — ты вносишь деньги на счёт. Списание — брокер списывает (тариф, вывод и т.п.).">?</span>
   </label>
-  <input id="topupAmount" type="number" step="any" placeholder="Например, 5000">
+  <select id="topupType">
+    <option value="topup">💰 Пополнение (+)</option>
+    <option value="withdraw">📉 Списание (−)</option>
+  </select>
+
+  <label>Сумма, ₽
+    <span class="tip" data-tip="Введи положительное число. Знак (+/−) система поставит сама в зависимости от типа операции.">?</span>
+  </label>
+  <input id="topupAmount" type="number" step="any" min="0" placeholder="Например, 5000">
 
   <label>Дата
-    <span class="tip" data-tip="Дата пополнения.">?</span>
+    <span class="tip" data-tip="Дата операции.">?</span>
   </label>
   <input id="topupDate" type="date">
 
   <label>Комментарий (необязательно)
-    <span class="tip" data-tip="Например: «довнёс из зарплаты» или «перевёл с другого счёта».">?</span>
+    <span class="tip" data-tip="Например: «тариф Трейдер» или «вывод прибыли».">?</span>
   </label>
-  <input id="topupNote" placeholder="Например: довнёс из зарплаты">
+  <input id="topupNote" placeholder="Например: тариф Трейдер">
 
-  <button onclick="addTopup()">➕ Добавить пополнение</button>
+  <button onclick="addTopup()">➕ Добавить операцию</button>
   <div id="topupList" style="margin-top:10px;"></div>
 </div>
-
+  
 <!-- ===== РЕЗЕРВНАЯ КОПИЯ ===== -->
 <div class="card">
   <h2>💾 Резервная копия
@@ -298,21 +302,24 @@ async function loadTrades() {
 }
 
 async function addTopup() {
-  const amount = +document.getElementById('topupAmount').value;
+  const type = document.getElementById('topupType').value; // 'topup' или 'withdraw'
+  const rawAmount = +document.getElementById('topupAmount').value;
   const date = document.getElementById('topupDate').value || new Date().toISOString().slice(0, 10);
   const note = document.getElementById('topupNote').value.trim();
 
-  if (!amount || amount <= 0) {
-    alert('⚠️ Введи сумму пополнения больше 0!');
+  if (!rawAmount || rawAmount <= 0) {
+    alert('⚠️ Введи сумму больше 0!');
     return;
   }
 
+  const amount = type === 'topup' ? rawAmount : -rawAmount;
+
   await db.trades.add({
-    type: 'topup',
-    topup: amount,
+    type: type,                // 'topup' или 'withdraw'
+    topup: amount,             // + для пополнения, − для списания
     date: date,
     note: note,
-    instr: '💰 Пополнение',
+    instr: type === 'topup' ? '💰 Пополнение' : '📉 Списание',
     dir: '—',
     entry: 0, exit: 0, stop: 0, qty: 0,
     commIn: 0, commOut: 0, tarif: 0,
@@ -322,7 +329,7 @@ async function addTopup() {
 
   document.getElementById('topupAmount').value = '';
   document.getElementById('topupNote').value = '';
-  alert('✅ Пополнение добавлено!');
+  alert(type === 'topup' ? '✅ Пополнение добавлено!' : '✅ Списание добавлено!');
   loadTrades();
 }
 
@@ -437,7 +444,7 @@ function getFiltered() {
 function render() {
   const allItems = getFiltered();
   const list = allItems.filter(t => !t.type || t.type === 'trade');
-  const topups = allItems.filter(t => t.type === 'topup');
+  const topups = allItems.filter(t => t.type === 'topup' || t.type === 'withdraw');
 
   const tbody = document.querySelector('#tradesTable tbody');
   tbody.innerHTML = '';
@@ -461,12 +468,18 @@ function render() {
     if (topups.length === 0) {
       topupListEl.innerHTML = '<p style="opacity:0.6; font-size:13px;">Пополнений пока нет.</p>';
     } else {
-      topupListEl.innerHTML = topups.map(t => `
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #333;">
-          <span>💰 <b>+${t.topup.toFixed(2)} ₽</b> — ${t.date} ${t.note ? '· ' + t.note : ''}</span>
-          <button class="del-btn" onclick="deleteTrade(${t.id})">🗑</button>
-        </div>
-      `).join('');
+      topupListEl.innerHTML = topups.map(t => {
+        const isTopup = t.type === 'topup';
+        const sign = isTopup ? '+' : '−';
+        const icon = isTopup ? '💰' : '📉';
+        const color = isTopup ? 'win' : 'loss';
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #333;">
+            <span>${icon} <b class="${color}">${sign}${Math.abs(t.topup).toFixed(2)} ₽</b> — ${t.date} ${t.note ? '· ' + t.note : ''}</span>
+            <button class="del-btn" onclick="deleteTrade(${t.id})">🗑</button>
+          </div>
+        `;
+      }).join('');
     }
   }
 
@@ -494,7 +507,7 @@ function render() {
     <p>Win Rate: <b>${winRate.toFixed(1)}%</b></p>
     <p>Средний R:R: <b>${avgRR.toFixed(2)}</b></p>
     <p>Прибыль от сделок: <b class="${tradeProfit>0?'win':'loss'}">${tradeProfit.toFixed(2)} ₽</b></p>
-    <p>Пополнений: <b class="win">+${totalTopup.toFixed(2)} ₽</b></p>
+    <p>Пополнений / списаний: <b class="${totalTopup >= 0 ? 'win' : 'loss'}">${totalTopup >= 0 ? '+' : ''}${totalTopup.toFixed(2)} ₽</b></p>
     <p>Депозит (прибыль + пополнения): <b>${deposit.toFixed(2)} ₽</b></p>
     <p>Просадка: <b class="loss">${maxDD.toFixed(2)} ₽</b></p>
   `;
@@ -574,7 +587,7 @@ function calcPlan() {
 function exportExcel() {
   let csv = 'Дата,Тип,Инструмент,Направление,Вход,Выход,Стоп,Кол-во,Ком.вход,Ком.выход,Пополнение,Прибыль,R:R,Время,Результат\n';
   trades.forEach(t => {
-    const type = t.type === 'topup' ? 'Пополнение' : 'Сделка';
+    const type = t.type === 'topup' ? 'Пополнение' : (t.type === 'withdraw' ? 'Списание' : 'Сделка');
     csv += `${t.date || ''},${type},${t.instr || ''},${t.dir || ''},${t.entry || ''},${t.exit || ''},${t.stop || ''},${t.qty || ''},${t.commIn || 0},${t.commOut || 0},${t.topup || 0},${(t.profit || 0).toFixed(2)},${(t.rr || 0).toFixed(2)},${t.time || ''},${t.result || ''}\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv' });
