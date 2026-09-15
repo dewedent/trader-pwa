@@ -611,9 +611,9 @@ async function importData(event) {
   let data = JSON.parse(text);
 
   data = data
-    .filter(t => t.instr && (t.qty > 0 || t.type === 'topup'))
+    .filter(t => t.instr && (t.qty > 0 || t.type === 'topup' || t.type === 'withdraw'))
     .map(t => {
-      if (t.type === 'topup') return t;
+      if (t.type === 'topup' || t.type === 'withdraw') return t;
 
       t.stop = t.stop || t.entry;
       t.commIn = t.commIn || 0;
