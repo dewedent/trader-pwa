@@ -499,6 +499,15 @@ function render() {
     const dd = peak - acc;
     if (dd > maxDD) maxDD = dd;
   });
+  
+  console.log('=== Просадка ===');
+let _acc = 0, _peak = 0;
+sorted.forEach(t => {
+  const delta = (t.type === 'topup' || t.type === 'withdraw') ? t.topup : t.profit;
+  _acc += delta;
+  if (_acc > _peak) _peak = _acc;
+  console.log(`${t.date} | ${t.instr || t.type} | delta: ${delta.toFixed(2)} | acc: ${_acc.toFixed(2)} | peak: ${_peak.toFixed(2)} | dd: ${(_peak - _acc).toFixed(2)}`);
+});
 
   // Если депозит отрицательный — просадка = 0
   if (deposit <= 0) maxDD = 0;
