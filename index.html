@@ -488,14 +488,20 @@ function render() {
   const winRate = list.length ? wins / list.length * 100 : 0;
   const deposit = tradeProfit + totalTopup;
 
+  // === ПРОСАДКА (относительно депозита) ===
   let peak = 0, acc = 0, maxDD = 0;
   const sorted = [...allItems].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  
   sorted.forEach(t => {
     const delta = (t.type === 'topup' || t.type === 'withdraw') ? t.topup : t.profit;
     acc += delta;
     if (acc > peak) peak = acc;
-    if (peak - acc > maxDD) maxDD = peak - acc;
+    const dd = peak - acc;
+    if (dd > maxDD) maxDD = dd;
   });
+
+  // Если депозит отрицательный — просадка = 0
+  if (deposit <= 0) maxDD = 0;
 
   document.getElementById('stats').innerHTML = `
     <p>Сделок: <b>${list.length}</b></p>
